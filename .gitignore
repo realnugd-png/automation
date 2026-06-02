@@ -1,0 +1,8 @@
+.env
+client_secrets.json
+token.json
+channel_token.json
+output/
+music/
+__pycache__/
+*.pyc

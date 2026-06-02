@@ -1,0 +1,49 @@
+name: Daily YouTube Upload
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 09:00 Swedish summer time (CEST = UTC+2)
+  workflow_dispatch:        # lets you trigger a run manually from GitHub
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y ffmpeg fonts-dejavu-extra fonts-liberation
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write credentials from secrets
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_CLIENT_SECRETS: ${{ secrets.YOUTUBE_CLIENT_SECRETS }}
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+        run: |
+          printf '%s' "$YOUTUBE_CLIENT_SECRETS" > client_secrets.json
+          printf '%s' "$YOUTUBE_TOKEN" > token.json
+          cat > .env <<EOF
+          GROQ_API_KEY=$GROQ_API_KEY
+          YOUTUBE_CLIENT_SECRETS_PATH=client_secrets.json
+          YOUTUBE_TOKEN_PATH=token.json
+          CHANNEL_NICHE=motivational and inspirational
+          NUM_SCENES=5
+          UPLOAD_PRIVACY=public
+          TTS_VOICE=en-US-AriaNeural
+          MUSIC_VOLUME=0.12
+          EOF
+
+      - name: Run pipeline
+        run: python main.py
