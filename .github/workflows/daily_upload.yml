@@ -1,9 +1,17 @@
-name: YouTube Upload Every 3 Hours
+name: YouTube Upload 6x Daily
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # every 4 hours (6 videos per day)
-  workflow_dispatch:        # lets you trigger a run manually from GitHub
+    # Peak engagement hours for global motivational audience (UTC)
+    # 5am, 8am, 12pm, 4pm, 7pm, 10pm UTC
+    # = 7am, 10am, 2pm, 6pm, 9pm, 12am Swedish time
+    - cron: '0 5 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 16 * * *'
+    - cron: '0 19 * * *'
+    - cron: '0 22 * * *'
+  workflow_dispatch:
 
 jobs:
   upload:
@@ -39,10 +47,10 @@ jobs:
           YOUTUBE_CLIENT_SECRETS_PATH=client_secrets.json
           YOUTUBE_TOKEN_PATH=token.json
           CHANNEL_NICHE=motivational and inspirational
-          NUM_SCENES=5
+          NUM_SCENES=8
           UPLOAD_PRIVACY=public
-          TTS_VOICE=en-US-AriaNeural
-          MUSIC_VOLUME=0.12
+          TTS_VOICE=en-US-GuyNeural
+          MUSIC_VOLUME=0.18
           EOF
 
       - name: Run pipeline

@@ -81,14 +81,38 @@ def _ease_out_cubic(t: float) -> float:
 
 
 def _color_grade(frame: np.ndarray) -> np.ndarray:
-    """Warm cinematic grade: lifted blacks, golden highlights, subtle desaturation."""
+    """
+    Motiversity-style cinematic grade:
+    - Crushed blacks (dark, moody, intense)
+    - Teal shadows + orange highlights (Hollywood blockbuster look)
+    - Strong desaturation for drama
+    - Slight contrast boost
+    """
     img = frame.astype(np.float32) / 255.0
-    img = img * 0.90 + 0.04
-    img[:, :, 0] = np.clip(img[:, :, 0] * 1.07, 0, 1)
-    img[:, :, 1] = np.clip(img[:, :, 1] * 1.01, 0, 1)
-    img[:, :, 2] = np.clip(img[:, :, 2] * 0.88, 0, 1)
+
+    # Crush blacks hard — creates that dark, intense motivational feel
+    img = np.power(img, 1.1) * 0.85
+
+    # Teal shadows: push blue/green in darks
+    dark_mask = 1.0 - img  # strong in shadows, weak in highlights
+    img[:, :, 2] = np.clip(img[:, :, 2] + dark_mask[:, :, 2] * 0.06, 0, 1)  # blue in shadows
+    img[:, :, 1] = np.clip(img[:, :, 1] + dark_mask[:, :, 1] * 0.03, 0, 1)  # green in shadows
+
+    # Orange highlights: boost red/green in brights
+    bright_mask = img
+    img[:, :, 0] = np.clip(img[:, :, 0] + bright_mask[:, :, 0] * 0.08, 0, 1)  # red in highlights
+    img[:, :, 1] = np.clip(img[:, :, 1] + bright_mask[:, :, 1] * 0.04, 0, 1)  # green in highlights
+    img[:, :, 2] = np.clip(img[:, :, 2] - bright_mask[:, :, 2] * 0.05, 0, 1)  # pull blue from highlights
+
+    # Desaturate for drama (cinematic films are ~70% saturation)
     gray = np.mean(img, axis=2, keepdims=True)
-    img = img * 0.83 + gray * 0.17
+    img = img * 0.75 + gray * 0.25
+
+    # Contrast S-curve: deepen darks, pop highlights
+    img = np.where(img < 0.5,
+                   img * 0.9,
+                   0.45 + (img - 0.5) * 1.1)
+
     return (np.clip(img, 0, 1) * 255).astype(np.uint8)
 
 
@@ -127,41 +151,41 @@ def _render_caption(frame: np.ndarray, text: str, progress: float = 1.0) -> np.n
     img = Image.alpha_composite(img, bar).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    font_size = max(38, int(h * 0.044))
+    font_size = max(44, int(h * 0.050))  # Bigger text for impact
     font = _load_font(font_size)
     font_bold = _load_font(font_size, bold=True)
 
-    padding = int(w * 0.06)
+    padding = int(w * 0.07)
     words = text.split()
-    highlighted_count = max(1, int(len(words) * progress * 1.1))
+    highlighted_count = max(1, int(len(words) * progress * 1.15))
 
-    # Build lines
     lines = _wrap_text(draw, text, font, w - 2 * padding)
-    line_h = int(font_size * 1.45)
+    line_h = int(font_size * 1.55)
     total_h = len(lines) * line_h
-    y_start = h - total_h - int(h * 0.045)
+    y_start = h - total_h - int(h * 0.055)
 
     word_idx = 0
     for line in lines:
         line_words = line.split()
-        # Calculate x position for each word
-        x = padding
         line_w = draw.textbbox((0, 0), line, font=font)[2]
-        x = (w - line_w) // 2  # center align
+        cur_x = (w - line_w) // 2
 
-        # Draw word by word
-        cur_x = x
-        for wi, word in enumerate(line_words):
+        for word in line_words:
             is_highlighted = word_idx < highlighted_count
             f = font_bold if is_highlighted else font
-            color = (255, 245, 180) if is_highlighted else (180, 175, 160)  # warm white vs dim
 
-            # Shadow
-            draw.text((cur_x + 2, y_start + 2), word, font=f, fill=(0, 0, 0))
+            # Gold for highlighted (like Motiversity), dim grey for upcoming
+            if is_highlighted:
+                color = (255, 255, 255)      # pure white for spoken words
+            else:
+                color = (120, 115, 108)       # dim grey for unspoken
+
+            # Multi-layer shadow for readability on any background
+            for sx, sy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, 4)]:
+                draw.text((cur_x + sx, y_start + sy), word, font=f, fill=(0, 0, 0))
             draw.text((cur_x, y_start), word, font=f, fill=color)
 
-            word_w = draw.textbbox((0, 0), word + " ", font=f)[2]
-            cur_x += word_w
+            cur_x += draw.textbbox((0, 0), word + " ", font=f)[2]
             word_idx += 1
 
         y_start += line_h
