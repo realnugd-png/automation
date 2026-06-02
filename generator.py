@@ -1,10 +1,12 @@
 """
-Script generation using Groq (free tier — Llama 3.3 70B).
-Get a free key at https://console.groq.com → API Keys
+Script generation using Groq (Llama 3.3 70B).
+Uses day-specific content formats and professional copywriting frameworks.
 """
 import json
+import re
 from groq import Groq
 import config
+from content_strategy import get_todays_format
 
 _client = None
 
@@ -16,54 +18,22 @@ def _get_client():
     return _client
 
 
-def generate_script() -> dict:
-    """Use Groq/Llama to generate a complete video script."""
-    client = _get_client()
-
-    prompt = f"""Create a compelling {config.CHANNEL_NICHE} YouTube video script.
-
-Split it into exactly {config.NUM_SCENES} scenes. Each scene should take ~20 seconds when spoken aloud.
-
-Return ONLY a valid JSON object — no markdown fences, no extra text:
-{{
-  "title": "YouTube title — engaging, max 80 chars",
-  "description": "YouTube description — 2-3 paragraphs with value, then a blank line, then hashtags",
-  "tags": ["tag1", "tag2"],
-  "scenes": [
-    {{
-      "text": "Narration for this scene — 2-4 powerful sentences",
-      "image_prompt": "Detailed image generation prompt. Style: cinematic, golden hour lighting, photorealistic, 8k, emotional atmosphere. No text or words in the image."
-    }}
-  ]
-}}
-
-Script arc: hook → story build → insight climax → empowering close
-Tags: 12-15 relevant motivational keywords
-Image prompts: vivid, specific — each should feel like a movie still"""
-
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=2048,
-        temperature=0.8,
-    )
-
-    raw = response.choices[0].message.content.strip()
-
-    # Strip markdown fences if present
-    if raw.startswith("```"):
+def _clean_json(raw: str) -> str:
+    """Extract and clean JSON from model output."""
+    # Strip markdown fences
+    if "```" in raw:
         parts = raw.split("```")
-        raw = parts[1]
+        raw = parts[1] if len(parts) > 1 else raw
         if raw.startswith("json"):
             raw = raw[4:]
-    raw = raw.strip()
 
-    # Extract the JSON object boundaries
+    # Extract JSON object boundaries
     start = raw.find("{")
     end = raw.rfind("}") + 1
-    raw = raw[start:end]
+    if start >= 0 and end > start:
+        raw = raw[start:end]
 
-    # Fix literal control characters inside JSON string values (Llama quirk)
+    # Fix literal control characters inside JSON strings
     cleaned = []
     in_string = False
     i = 0
@@ -83,15 +53,83 @@ Image prompts: vivid, specific — each should feel like a movie still"""
         else:
             cleaned.append(c)
         i += 1
-    raw = "".join(cleaned)
 
-    script = json.loads(raw)
+    return "".join(cleaned).strip()
 
-    assert "title" in script, "Missing title"
-    assert "description" in script, "Missing description"
-    assert "tags" in script, "Missing tags"
-    assert len(script["scenes"]) == config.NUM_SCENES, (
-        f"Expected {config.NUM_SCENES} scenes, got {len(script['scenes'])}"
-    )
 
-    return script
+def _build_prompt(fmt: dict) -> str:
+    """Build a highly optimized generation prompt."""
+    return f"""You are a world-class YouTube scriptwriter for a viral motivational channel.
+Today's format: {fmt['name']} ({fmt['framework']} framework)
+Topic: {fmt['niche']}
+Hook style: {fmt['hook_style']}
+
+FRAMEWORK TO FOLLOW:
+{fmt['framework_instructions']}
+
+CRITICAL RULES:
+- First sentence of scene 1 MUST hook within 3 seconds — no slow builds
+- Each scene: 2-4 punchy sentences (15-20 seconds when spoken)
+- Language: simple, powerful, direct — no corporate fluff
+- Speak directly to "you" — personal and visceral
+- Vary sentence length: short punches mixed with longer flowing lines
+- End scene 5 with energy, not a generic "subscribe" request
+
+SEO RULES for title:
+- Include a number OR a power word (Powerful, Brutal, Raw, Unstoppable, Hidden)
+- 50-65 characters ideal
+- Front-load the main keyword
+
+Generate exactly {config.NUM_SCENES} scenes. Return ONLY this JSON (no markdown, no extra text):
+{{
+  "title": "SEO-optimized YouTube title (50-65 chars)",
+  "description": "YouTube description paragraph 1 (hook + value)\\n\\nParagraph 2 (what they learn)\\n\\nParagraph 3 (subscribe CTA + upload schedule)\\n\\n#motivation #mindset #success #inspiration #selfimprovement #dailymotivation #motivational #mindsetshift #growthmindset #successmindset",
+  "tags": ["daily motivation", "motivation", "mindset", "success", "inspiration", "self improvement", "motivational speech", "growth mindset", "positive thinking", "mental strength", "confidence", "success habits", "life advice", "mindset shift", "motivational video"],
+  "format": "{fmt['name']}",
+  "scenes": [
+    {{
+      "text": "Scene narration — punchy, emotional, direct",
+      "image_prompt": "Cinematic photorealistic scene. {fmt['image_style']}. Golden hour or dramatic lighting. 8K quality. No text, no words in the image. Emotional and visually striking."
+    }}
+  ]
+}}"""
+
+
+def generate_script(retries: int = 3) -> dict:
+    """Generate a complete video script using today's content format."""
+    client = _get_client()
+    fmt = get_todays_format()
+
+    for attempt in range(retries):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": _build_prompt(fmt)}],
+                max_tokens=2048,
+                temperature=0.85,
+            )
+
+            raw = response.choices[0].message.content
+            raw = _clean_json(raw)
+            script = json.loads(raw)
+
+            assert "title" in script, "Missing title"
+            assert "description" in script, "Missing description"
+            assert "tags" in script, "Missing tags"
+            assert len(script["scenes"]) == config.NUM_SCENES, (
+                f"Expected {config.NUM_SCENES} scenes, got {len(script['scenes'])}"
+            )
+
+            # Ensure tags is a list of strings
+            if isinstance(script["tags"], str):
+                script["tags"] = [t.strip() for t in script["tags"].split(",")]
+
+            script["format"] = fmt["name"]
+            return script
+
+        except (json.JSONDecodeError, AssertionError) as e:
+            if attempt == retries - 1:
+                raise RuntimeError(f"Script generation failed after {retries} attempts: {e}")
+            print(f"  Attempt {attempt + 1} failed ({e}), retrying...")
+
+    raise RuntimeError("Script generation failed")
