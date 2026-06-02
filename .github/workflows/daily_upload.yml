@@ -1,8 +1,8 @@
-name: Daily YouTube Upload
+name: YouTube Upload Every 3 Hours
 
 on:
   schedule:
-    - cron: '0 7 * * *'   # 09:00 Swedish summer time (CEST = UTC+2)
+    - cron: '0 */3 * * *'  # every 3 hours (8 videos per day)
   workflow_dispatch:        # lets you trigger a run manually from GitHub
 
 jobs:
