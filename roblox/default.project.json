@@ -1,5 +1,5 @@
 {
-  "name": "MyGame",
+  "name": "BecomeAnMillionaireRNG",
   "servePort": 34872,
   "tree": {
     "$className": "DataModel",
@@ -9,10 +9,19 @@
     "ServerScriptService": {
       "Server": { "$path": "src/server" }
     },
+    "ServerStorage": {
+      "Models": { "$className": "Folder" }
+    },
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": { "$path": "src/client" }
       }
+    },
+    "Players": {
+      "$properties": { "CharacterAutoLoads": true }
+    },
+    "Workspace": {
+      "$properties": { "Gravity": 196.2 }
     }
   }
 }
